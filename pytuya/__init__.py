@@ -41,8 +41,6 @@ else:
 
 SET = 'set'
 
-PROTOCOL_VERSION_BYTES = b'3.1'
-
 IS_PY2 = sys.version_info[0] == 2
 
 class AESCipher(object):
@@ -139,6 +137,7 @@ class XenonDevice(object):
             
         Attributes:
             port (int): The port to connect to.
+            version (str): The protocol version.
         """
         self.id = dev_id
         self.address = address
@@ -148,6 +147,7 @@ class XenonDevice(object):
         self.connection_timeout = connection_timeout
 
         self.port = 6668  # default - do not expect caller to pass in
+        self.version = '3.1' # default - do not expect caller to pass in
 
     def __repr__(self):
         return '%r' % ((self.id, self.address),)  # FIXME can do better than this
@@ -204,7 +204,7 @@ class XenonDevice(object):
             self.cipher = AESCipher(self.local_key)  # expect to connect and then disconnect to set new
             json_payload = self.cipher.encrypt(json_payload)
             #print('crypted json_payload %r' % json_payload)
-            preMd5String = b'data=' + json_payload + b'||lpv=' + PROTOCOL_VERSION_BYTES + b'||' + self.local_key
+            preMd5String = b'data=' + json_payload + b'||lpv=' + self.version.encode('latin1') + b'||' + self.local_key
             #print('preMd5String %r' % preMd5String)
             m = md5()
             m.update(preMd5String)
@@ -212,7 +212,7 @@ class XenonDevice(object):
             hexdigest = m.hexdigest()
             #print(hexdigest)
             #print(hexdigest[8:][:16])
-            json_payload = PROTOCOL_VERSION_BYTES + hexdigest[8:][:16].encode('latin1') + json_payload
+            json_payload = self.version.encode('latin1') + hexdigest[8:][:16].encode('latin1') + json_payload
             #print('data_to_send')
             #print(json_payload)
             #print('crypted json_payload (%d) %r' % (len(json_payload), json_payload))
@@ -262,12 +262,12 @@ class OutletDevice(XenonDevice):
         #print('result %r' % result)
         if result.startswith(b'{'):
             # this is the regular expected code path
-            result = json.loads(result.decode())
-        elif result.startswith(PROTOCOL_VERSION_BYTES):
+            result = json.loads(result)
+        elif result.startswith(self.version):
             # got an encrypted payload, happens occasionally
             # expect resulting json to look similar to:: {"devId":"ID","dps":{"1":true,"2":0},"t":EPOCH_SECS,"s":3_DIGIT_NUM}
             # NOTE dps.2 may or may not be present
-            result = result[len(PROTOCOL_VERSION_BYTES):]  # remove version header
+            result = result[len(self.version):]  # remove version header
             result = result[16:]  # remove (what I'm guessing, but not confirmed is) 16-bytes of MD5 hexdigest of payload
             cipher = AESCipher(self.local_key)
             result = cipher.decrypt(result)
