@@ -58,23 +58,15 @@ class AESCipher(object):
             cipher = pyaes.blockfeeder.Encrypter(pyaes.AESModeOfOperationECB(self.key))  # no IV, auto pads to 16
             crypted_text = cipher.feed(raw)
             crypted_text += cipher.feed()  # flush final block
-        #print('crypted_text %r' % crypted_text)
-        #print('crypted_text (%d) %r' % (len(crypted_text), crypted_text))
+            
         crypted_text_b64 = base64.b64encode(crypted_text)
-        #print('crypted_text_b64 (%d) %r' % (len(crypted_text_b64), crypted_text_b64))
         return crypted_text_b64
     def decrypt(self, enc):
         enc = base64.b64decode(enc)
-        #print('enc (%d) %r' % (len(enc), enc))
-        #enc = self._unpad(enc)
-        #enc = self._pad(enc)
-        #print('upadenc (%d) %r' % (len(enc), enc))
         if Crypto:
             cipher = AES.new(self.key, AES.MODE_ECB)
             raw = cipher.decrypt(enc)
-            #print('raw (%d) %r' % (len(raw), raw))
             return self._unpad(raw).decode('utf-8')
-            #return self._unpad(cipher.decrypt(enc)).decode('utf-8')
         else:
             cipher = pyaes.blockfeeder.Decrypter(pyaes.AESModeOfOperationECB(self.key))  # no IV, auto pads to 16
             plain_text = cipher.feed(enc)
@@ -193,53 +185,29 @@ class XenonDevice(object):
 
         # Create byte buffer from hex data
         json_payload = json.dumps(json_data)
-        #print(json_payload)
         json_payload = json_payload.replace(' ', '')  # if spaces are not removed device does not respond!
         json_payload = json_payload.encode('utf-8')
         log.debug('json_payload=%r', json_payload)
 
         if command == SET:
             # need to encrypt
-            #print('json_payload %r' % json_payload)
             self.cipher = AESCipher(self.local_key)  # expect to connect and then disconnect to set new
             json_payload = self.cipher.encrypt(json_payload)
-            #print('crypted json_payload %r' % json_payload)
             preMd5String = b'data=' + json_payload + b'||lpv=' + self.version.encode('latin1') + b'||' + self.local_key
-            #print('preMd5String %r' % preMd5String)
             m = md5()
             m.update(preMd5String)
-            #print(repr(m.digest()))
             hexdigest = m.hexdigest()
-            #print(hexdigest)
-            #print(hexdigest[8:][:16])
             json_payload = self.version.encode('latin1') + hexdigest[8:][:16].encode('latin1') + json_payload
-            #print('data_to_send')
-            #print(json_payload)
-            #print('crypted json_payload (%d) %r' % (len(json_payload), json_payload))
-            #print('json_payload  %r' % repr(json_payload))
-            #print('json_payload len %r' % len(json_payload))
-            #print(bin2hex(json_payload))
             self.cipher = None  # expect to connect and then disconnect to set new
 
 
         postfix_payload = hex2bin(bin2hex(json_payload) + payload_dict[self.dev_type]['suffix'])
-        #print('postfix_payload %r' % postfix_payload)
-        #print('postfix_payload %r' % len(postfix_payload))
-        #print('postfix_payload %x' % len(postfix_payload))
-        #print('postfix_payload %r' % hex(len(postfix_payload)))
         assert len(postfix_payload) <= 0xff
         postfix_payload_hex_len = '%x' % len(postfix_payload)  # TODO this assumes a single byte 0-255 (0x00-0xff)
         buffer = hex2bin( payload_dict[self.dev_type]['prefix'] + 
                           payload_dict[self.dev_type][command]['hexByte'] + 
                           '000000' +
                           postfix_payload_hex_len ) + postfix_payload
-        #print('command', command)
-        #print('prefix')
-        #print(payload_dict[self.dev_type][command]['prefix'])
-        #print(repr(buffer))
-        #print(bin2hex(buffer, pretty=True))
-        #print(bin2hex(buffer, pretty=False))
-        #print('full buffer(%d) %r' % (len(buffer), buffer))
         return buffer
 
 
@@ -258,8 +226,6 @@ class OutletDevice(XenonDevice):
 
         result = data[20:-8]  # hard coded offsets
         log.debug('result=%r', result)
-        #result = data[data.find('{'):data.rfind('}')+1]  # naive marker search, hope neither { nor } occur in header/footer
-        #print('result %r' % result)
         if result.startswith(b'{'):
             # this is the regular expected code path
             result = json.loads(result)
@@ -290,7 +256,6 @@ class OutletDevice(XenonDevice):
         if isinstance(switch, int):
             switch = str(switch)  # index and payload is a string
         payload = self.generate_payload(SET, {switch:on})
-        #print('payload %r' % payload)
 
         data = self._send_receive(payload)
         log.debug('set_status received data=%r', data)
